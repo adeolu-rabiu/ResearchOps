@@ -35,3 +35,21 @@ docs/phases/phase-5/low-level-design.md
 docs/phases/phase-6/low-level-design.md
 docs/phases/phase-7/low-level-design.md
 docs/phases/phase-8/low-level-design.md
+
+# Terraform secrets and local state
+*.tfvars
+*.tfvars.json
+.terraform/
+terraform.tfstate
+terraform.tfstate.*
+crash.log
+override.tf
+override.tf.json
+*_override.tf
+*_override.tf.json
+
+# SSH keys
+*.pem
+*.key
+id_rsa
+id_rsa.pub
