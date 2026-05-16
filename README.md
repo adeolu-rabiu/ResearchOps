@@ -52,7 +52,6 @@ cloud providers.
 
 ## Hardware Infrastructure
 
-![ResearchOps Hardware Infrastructure](docs/phases/phase-0/hardware-infrastructure.jpg)
 
 **HP EliteDesk 800 G2** — Intel Core i5-6500 @ 3.20GHz · 4 Cores · 40GB DDR4 RAM · 3.25TB Total Drive Capacity
 
@@ -177,39 +176,39 @@ and output retrieval.
 
 flowchart TD
 
-    A["<b>Researcher logs into<br/>ResearchOps Portal</b>"] --> B["<b>Portal authenticates user</b>"]
-    B --> C["<b>Researcher selects<br/>numbered menu option</b>"]
+    A["Researcher logs into<br/>ResearchOps Portal"] --> B["Portal authenticates user"]
+    B --> C["Researcher selects<br/>numbered menu option"]
 
-    C --> D["<b>Submit job</b>"]
-    C --> E["<b>Check queue</b>"]
-    C --> F["<b>View quota</b>"]
-    C --> G["<b>Browse data</b>"]
-    C --> H["<b>Check platform status</b>"]
+    C --> D["Submit job"]
+    C --> E["Check queue"]
+    C --> F["View quota"]
+    C --> G["Browse data"]
+    C --> H["Check platform status"]
 
-    D --> I["<b>Quota Engine validates<br/>CPU, RAM, and storage</b>"]
-    I --> J{"<b>Within quota?</b>"}
+    D --> I["Quota Engine validates<br/>CPU, RAM, and storage"]
+    I --> J{"Within quota?"}
 
-    J -- "<b>No</b>" --> K["<b>Request rejected<br/>or resized</b>"]
+    J -- "No" --> K["Request rejected<br/>or resized"]
     K --> C
 
-    J -- "<b>Yes</b>" --> L["<b>RBAC authorises<br/>submission</b>"]
-    L --> M["<b>Job submitted to<br/>HTCondor</b>"]
-    M --> N["<b>HTCondor schedules job</b>"]
-    N --> O["<b>Execute node runs job<br/>inside Apptainer</b>"]
-    O --> P["<b>Job reads/writes data<br/>on NFS shared storage</b>"]
-    P --> Q["<b>Metrics sent to<br/>Prometheus/Grafana</b>"]
-    Q --> R["<b>Researcher receives<br/>job output</b>"]
+    J -- "Yes" --> L["RBAC authorises<br/>submission"]
+    L --> M["Job submitted to<br/>HTCondor"]
+    M --> N["HTCondor schedules job"]
+    N --> O["Execute node runs job<br/>inside Apptainer"]
+    O --> P["Job reads/writes data<br/>on NFS shared storage"]
+    P --> Q["Metrics sent to<br/>Prometheus/Grafana"]
+    Q --> R["Researcher receives<br/>job output"]
 
-    E --> S["<b>Show queued, running,<br/>completed or failed jobs</b>"]
-    F --> T["<b>Show current quota usage</b>"]
-    G --> U["<b>Open authorised<br/>project data</b>"]
-    H --> V["<b>Show service health<br/>dashboard</b>"]
+    E --> S["Show queued, running,<br/>completed or failed jobs"]
+    F --> T["Show current quota usage"]
+    G --> U["Open authorised<br/>project data"]
+    H --> V["Show service health<br/>dashboard"]
 
     S --> C
     T --> C
     U --> C
     V --> C
-    R --> W["<b>Researcher logs out<br/>or submits another job</b>"]
+    R --> W["Researcher logs out<br/>or submits another job"]
 
     classDef portal fill:#E0F2FE,stroke:#0369A1,stroke-width:2px,color:#0C4A6E,font-weight:bold
     classDef menu fill:#EDE9FE,stroke:#7C3AED,stroke-width:2px,color:#3B0764,font-weight:bold
