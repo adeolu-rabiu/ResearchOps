@@ -9,6 +9,7 @@
 ---
 
 ![Proxmox VE](https://img.shields.io/badge/Proxmox_VE-E57000?style=flat-square&logo=proxmox&logoColor=white)
+![ResearchOps Hardware Infrastructure](docs/phases/phase-0/hardware-infrastructure.jpg)
 ![HTCondor](https://img.shields.io/badge/HTCondor-003366?style=flat-square&logoColor=white)
 ![Terraform](https://img.shields.io/badge/Terraform-7B42BC?style=flat-square&logo=terraform&logoColor=white)
 ![Ansible](https://img.shields.io/badge/Ansible-EE0000?style=flat-square&logo=ansible&logoColor=white)
