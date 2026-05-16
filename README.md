@@ -50,6 +50,27 @@ cloud providers.
 
 ![ResearchOps Architecture](docs/phases/phase-0/architecture.png)
 
+## Hardware Infrastructure
+
+![ResearchOps Hardware Infrastructure](docs/phases/phase-0/hardware-infrastructure.jpg)
+
+**HP EliteDesk 800 G2** — Intel Core i5-6500 @ 3.20GHz · 4 Cores · 40GB DDR4 RAM · 3.25TB Total Drive Capacity
+
+| Component | Detail |
+|-----------|--------|
+| Physical host | HP EliteDesk 800 G2 |
+| CPU | Intel Core i5-6500 @ 3.20GHz (4 cores, 1 socket) |
+| RAM | 40 GB DDR4 |
+| Hypervisor | Proxmox VE 9.1.9 (Kernel 6.17.13-4-pve) |
+| Boot drive | 36.61 GB root partition |
+| Primary VM storage | vmdata — 1TB HDD, 843GB free (/mnt/vmdata) |
+| Backup replica | datastore2tb — 2TB HDD, 1.7TB free (/mnt/datastore2tb) |
+| General SSD | datastore256 — 256GB SSD, 212GB free (/mnt/datastore256) |
+| External bridge | vmbr0 — 192.168.1.235, LAN/home network |
+| Internal bridge | vmbr1 — 10.0.0.1/24, ResearchOps private network, NAT via vmbr0 |
+
+
+
 ---
 
 ## Value Proposition
@@ -278,13 +299,13 @@ All VMs provisioned on **Proxmox VE (rabtech)** — 40GB RAM host, 843GB primary
 
 | Layer | Technology | Purpose |
 |-------|-----------|---------|
-| Hypervisor | Proxmox VE 8 | Bare-metal VM host, cloud-init templating |
+| Hypervisor | Proxmox VE 9.1.9 | Bare-metal VM host, cloud-init templating |
 | Compute scheduler | HTCondor 23.x | Job queuing, dispatch, fair-use scheduling |
 | Job sandboxing | Apptainer 1.2 | Rootless container runtime for untrusted workloads |
 | Image building | Docker + Registry | Build and store Apptainer SIF images |
 | Shared storage | NFS v4 | Per-project /data with OS-enforced isolation |
 | Self-service portal | ResearchOps Service Manager | Numbered menu, quota enforcement, RBAC, audit log |
-| VM provisioning | Terraform 1.7 + telmate/proxmox | All 6 VMs defined as code |
+| VM provisioning | Terraform 1.7 + bpg/proxmox | All 6 VMs defined as code |
 | Configuration mgmt | Ansible 9 | Idempotent roles for every service on every VM |
 | Metrics collection | Prometheus 2.x | SLI recording rules, 30-day retention |
 | Dashboards | Grafana | SLO error budget, job throughput, node health |
@@ -308,8 +329,8 @@ All VMs provisioned on **Proxmox VE (rabtech)** — 40GB RAM host, 843GB primary
 | Phase | Description | Status |
 |-------|-------------|--------|
 | 0 | IaC scaffold, GitHub repo, tools installation | ✅ Complete |
-| 1 | Terraform VM provisioning — all 6 VMs from code | 🔄 In progress |
-| 2 | HTCondor pool — Central Manager, Submit, Execute nodes | ⏳ Pending |
+| 1 | Terraform VM provisioning — all 6 VMs from code | ✅ Complete |
+| 2 | HTCondor pool — Central Manager, Submit, Execute nodes | 🔄 In progress |
 | 3 | Apptainer + Docker — container isolation layer | ⏳ Pending |
 | 4 | NFS shared storage — per-project data isolation | ⏳ Pending |
 | 5 | Prometheus + Grafana + SLO rules — full observability | ⏳ Pending |
