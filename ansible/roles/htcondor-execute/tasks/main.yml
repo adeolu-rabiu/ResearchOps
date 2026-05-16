@@ -1,0 +1,127 @@
+---
+- name: Check if HTCondor already installed
+  command: which condor_status
+  register: condor_check
+  ignore_errors: yes
+  changed_when: false
+
+- name: Download HTCondor tarball
+  get_url:
+    url: "https://research.cs.wisc.edu/htcondor/tarball/23.0/23.0.18/release/condor-23.0.18-x86_64_Ubuntu22-stripped.tar.gz"
+    dest: /tmp/htcondor.tar.gz
+    mode: '0644'
+    timeout: 300
+  when: condor_check.rc != 0
+
+- name: Extract HTCondor tarball
+  unarchive:
+    src: /tmp/htcondor.tar.gz
+    dest: /tmp/
+    remote_src: yes
+  when: condor_check.rc != 0
+
+- name: Create condor system user
+  user:
+    name: condor
+    system: yes
+    shell: /sbin/nologin
+    create_home: no
+  ignore_errors: yes
+
+- name: Set full hostname
+  hostname:
+    name: "{{ inventory_hostname }}.researchops.local"
+
+- name: Run HTCondor installer
+  shell: |
+    export HOSTNAME={{ inventory_hostname }}.researchops.local
+    cd /tmp/condor-23.0.18-1.1-x86_64_Ubuntu22-stripped
+    ./condor_install \
+      --prefix=/opt/htcondor \
+      --local-dir=/var/lib/condor \
+      --owner=condor
+  args:
+    creates: /opt/htcondor/bin/condor_status
+  when: condor_check.rc != 0
+
+- name: Add HTCondor libraries to ldconfig
+  copy:
+    dest: /etc/ld.so.conf.d/htcondor.conf
+    content: |
+      /opt/htcondor/lib
+      /opt/htcondor/lib/condor
+  notify: run ldconfig
+
+- name: Run ldconfig
+  command: ldconfig
+
+- name: Add HTCondor to PATH
+  copy:
+    dest: /etc/profile.d/htcondor.sh
+    content: |
+      export CONDOR_CONFIG=/opt/htcondor/etc/condor_config
+      export PATH=/opt/htcondor/bin:/opt/htcondor/sbin:$PATH
+
+- name: Create runtime directories
+  file:
+    path: "{{ item }}"
+    state: directory
+    owner: condor
+    group: condor
+    mode: '0755'
+  loop:
+    - /var/lib/condor
+    - /var/lib/condor/log
+    - /var/lib/condor/spool
+    - /var/lib/condor/execute
+    - /var/run/condor
+    - /var/lock/condor
+
+- name: Create /etc/condor directory
+  file:
+    path: /etc/condor
+    state: directory
+    mode: '0755'
+
+- name: Deploy condor config
+  template:
+    src: condor_config.local.j2
+    dest: /etc/condor/condor_config.local
+    owner: root
+    group: root
+    mode: '0644'
+  notify: restart condor
+
+- name: Set LOCAL_CONFIG_FILE in main config
+  lineinfile:
+    path: /opt/htcondor/etc/condor_config
+    line: "LOCAL_CONFIG_FILE = /etc/condor/condor_config.local"
+    regexp: "^LOCAL_CONFIG_FILE"
+
+- name: Create condor systemd service
+  copy:
+    dest: /etc/systemd/system/condor.service
+    content: |
+      [Unit]
+      Description=HTCondor Batch System
+      After=network.target network-online.target
+
+      [Service]
+      Type=simple
+      Environment=CONDOR_CONFIG=/opt/htcondor/etc/condor_config
+      ExecStart=/opt/htcondor/sbin/condor_master -f
+      ExecStop=/opt/htcondor/sbin/condor_off -graceful
+      Restart=on-failure
+      RestartSec=5
+      TimeoutStartSec=60
+
+      [Install]
+      WantedBy=multi-user.target
+  notify: restart condor
+
+- name: Enable and start condor
+  systemd:
+    name: condor
+    state: started
+    enabled: yes
+    daemon_reload: yes

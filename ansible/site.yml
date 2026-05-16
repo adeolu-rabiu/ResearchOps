@@ -1,0 +1,24 @@
+---
+- name: Apply common configuration to all hosts
+  hosts: all
+  become: yes
+  roles:
+    - common
+
+- name: Configure HTCondor Central Manager
+  hosts: manager
+  become: yes
+  roles:
+    - htcondor-cm
+
+- name: Configure HTCondor Submit Node
+  hosts: submit
+  become: yes
+  roles:
+    - htcondor-submit
+
+- name: Configure HTCondor Execute Nodes
+  hosts: execute
+  become: yes
+  roles:
+    - htcondor-execute

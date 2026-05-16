@@ -1,0 +1,9 @@
+---
+- name: restart condor
+  systemd:
+    name: condor
+    state: restarted
+    daemon_reload: yes
+
+- name: run ldconfig
+  command: ldconfig
