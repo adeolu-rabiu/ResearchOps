@@ -16,9 +16,11 @@
   become: yes
   roles:
     - htcondor-submit
+    - docker
 
 - name: Configure HTCondor Execute Nodes
   hosts: execute
   become: yes
   roles:
     - htcondor-execute
+    - apptainer

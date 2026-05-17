@@ -1,0 +1,47 @@
+---
+- name: Check if Docker already installed
+  command: which docker
+  register: docker_check
+  ignore_errors: yes
+  changed_when: false
+
+- name: Download Docker convenience install script
+  get_url:
+    url: https://get.docker.com
+    dest: /tmp/get-docker.sh
+    mode: '0755'
+    timeout: 60
+  when: docker_check.rc != 0
+
+- name: Install Docker
+  shell: sh /tmp/get-docker.sh
+  when: docker_check.rc != 0
+  args:
+    creates: /usr/bin/docker
+
+- name: Enable and start Docker
+  systemd:
+    name: docker
+    state: started
+    enabled: yes
+
+- name: Create containers build directory on submit node
+  file:
+    path: /data/containers
+    state: directory
+    mode: '0755'
+
+- name: Create jobs directory
+  file:
+    path: /data/jobs
+    state: directory
+    mode: '01777'
+
+- name: Verify Docker is running
+  command: docker --version
+  register: docker_version
+  changed_when: false
+
+- name: Print Docker version
+  debug:
+    msg: "Docker installed: {{ docker_version.stdout }}"

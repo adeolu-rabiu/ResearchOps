@@ -125,3 +125,17 @@
     state: started
     enabled: yes
     daemon_reload: yes
+
+- name: Set HTCondor network interface to inventory IP
+  lineinfile:
+    path: /etc/condor/condor_config.local
+    regexp: '^NETWORK_INTERFACE'
+    line: "NETWORK_INTERFACE = {{ ansible_host }}"
+  notify: restart condor
+
+- name: Disable binding to all interfaces
+  lineinfile:
+    path: /etc/condor/condor_config.local
+    regexp: '^BIND_ALL_INTERFACES'
+    line: "BIND_ALL_INTERFACES = False"
+  notify: restart condor

@@ -1,0 +1,34 @@
+---
+- name: Install Apptainer runtime dependencies
+  apt:
+    name:
+      - apptainer
+      - squashfuse
+      - fuse2fs
+      - gocryptfs
+      - fuse-overlayfs
+      - uidmap
+    state: present
+    update_cache: yes
+
+- name: Ensure researcher user exists on execute nodes
+  user:
+    name: researcher
+    shell: /bin/bash
+    create_home: yes
+    state: present
+
+- name: Install stable Apptainer wrapper for HTCondor jobs
+  copy:
+    dest: /usr/local/bin/run-apptainer-job
+    owner: root
+    group: root
+    mode: "0755"
+    content: |
+      #!/usr/bin/env bash
+      set -euo pipefail
+
+      export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+      export APPTAINER_CONF=/etc/apptainer/apptainer.conf
+
+      exec /usr/bin/apptainer run "$@"
