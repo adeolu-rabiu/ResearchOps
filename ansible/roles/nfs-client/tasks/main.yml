@@ -1,0 +1,56 @@
+---
+- name: Install NFS client
+  apt:
+    name: nfs-common
+    state: present
+    update_cache: yes
+
+- name: Create research groups on client
+  group:
+    name: "{{ item.name }}"
+    gid: "{{ item.gid }}"
+    state: present
+  loop:
+    - { name: physics-grp,  gid: 2001 }
+    - { name: biology-grp,  gid: 2002 }
+    - { name: chem-grp,     gid: 2003 }
+    - { name: research-grp, gid: 2004 }
+
+- name: Create group users on client
+  user:
+    name: "{{ item.name }}"
+    uid: "{{ item.uid }}"
+    group: "{{ item.group }}"
+    shell: /sbin/nologin
+    create_home: no
+    state: present
+  loop:
+    - { name: physics-user, uid: 2001, group: physics-grp }
+    - { name: biology-user, uid: 2002, group: biology-grp }
+    - { name: chem-user,    uid: 2003, group: chem-grp    }
+
+- name: Add researcher to research-grp
+  user:
+    name: researcher
+    groups: research-grp
+    append: yes
+
+- name: Create /data mount point
+  file:
+    path: /data
+    state: directory
+    mode: '0755'
+
+- name: Add NFS mount to fstab
+  lineinfile:
+    path: /etc/fstab
+    line: "10.0.0.14:/data /data nfs rw,sync,hard,intr 0 0"
+    state: present
+
+- name: Mount NFS share
+  mount:
+    path: /data
+    src: 10.0.0.14:/data
+    fstype: nfs
+    opts: rw,sync,hard,intr
+    state: mounted

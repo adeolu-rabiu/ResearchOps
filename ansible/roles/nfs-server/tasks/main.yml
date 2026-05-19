@@ -1,0 +1,76 @@
+---
+- name: Install NFS server packages
+  apt:
+    name:
+      - nfs-kernel-server
+      - nfs-common
+    state: present
+    update_cache: yes
+
+- name: Create research groups
+  group:
+    name: "{{ item.name }}"
+    gid: "{{ item.gid }}"
+    state: present
+  loop:
+    - { name: physics-grp,  gid: 2001 }
+    - { name: biology-grp,  gid: 2002 }
+    - { name: chem-grp,     gid: 2003 }
+    - { name: research-grp, gid: 2004 }
+
+- name: Create group users
+  user:
+    name: "{{ item.name }}"
+    uid: "{{ item.uid }}"
+    group: "{{ item.group }}"
+    shell: /sbin/nologin
+    create_home: no
+    state: present
+  loop:
+    - { name: physics-user, uid: 2001, group: physics-grp }
+    - { name: biology-user, uid: 2002, group: biology-grp }
+    - { name: chem-user,    uid: 2003, group: chem-grp    }
+
+- name: Create /data top level
+  file:
+    path: /data
+    state: directory
+    mode: '0755'
+
+- name: Create per-project directories with strict permissions
+  file:
+    path: "/data/projects/{{ item.name }}"
+    state: directory
+    owner: root
+    group: "{{ item.group }}"
+    mode: '0770'
+  loop:
+    - { name: physics,   group: physics-grp }
+    - { name: biology,   group: biology-grp }
+    - { name: chemistry, group: chem-grp    }
+
+- name: Create shared infrastructure directories
+  file:
+    path: "{{ item.path }}"
+    state: directory
+    owner: root
+    group: "{{ item.group }}"
+    mode: "{{ item.mode }}"
+  loop:
+    - { path: /data/shared,     group: research-grp, mode: '0775' }
+    - { path: /data/containers, group: root,         mode: '0755' }
+    - { path: /data/outputs,    group: root,         mode: '1777' }
+    - { path: /data/logs,       group: root,         mode: '0700' }
+
+- name: Configure NFS exports
+  copy:
+    dest: /etc/exports
+    content: |
+      /data 10.0.0.0/24(rw,sync,no_subtree_check,no_root_squash)
+  notify: reload exports
+
+- name: Enable and start NFS server
+  systemd:
+    name: nfs-kernel-server
+    state: started
+    enabled: yes

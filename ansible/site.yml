@@ -5,6 +5,18 @@
   roles:
     - common
 
+- name: Configure NFS Server
+  hosts: storage
+  become: yes
+  roles:
+    - nfs-server
+
+- name: Configure NFS Clients
+  hosts: submit,manager,execute,observe
+  become: yes
+  roles:
+    - nfs-client
+
 - name: Configure HTCondor Central Manager
   hosts: manager
   become: yes
