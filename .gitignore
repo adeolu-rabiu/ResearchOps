@@ -53,3 +53,9 @@ override.tf.json
 *.key
 id_rsa
 id_rsa.pub
+
+# Monitoring secrets
+.env
+*.env
+**/secrets/*
+slack_webhook_url
