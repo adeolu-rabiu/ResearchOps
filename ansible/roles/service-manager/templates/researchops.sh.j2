@@ -1,0 +1,319 @@
+#!/bin/bash
+# ResearchOps Service Manager
+# Deployed by Ansible — do not edit manually
+# Version: 1.0
+
+export CONDOR_CONFIG="{{ condor_config }}"
+export PATH="{{ condor_bin }}:{{ condor_sbin }}:$PATH"
+
+LOG="{{ service_manager_log }}"
+USER=$(whoami)
+MAX_RAM="{{ max_ram_per_job_mb }}"
+MAX_JOBS="{{ max_jobs_per_user }}"
+
+# ── Logging ─────────────────────────────────────────────────────────────────
+log() {
+  echo "$(date '+%Y-%m-%d %H:%M:%S') [$USER] $*" >> "$LOG"
+}
+
+# ── Helpers ──────────────────────────────────────────────────────────────────
+print_banner() {
+  clear
+  echo "=============================================="
+  echo "  ResearchOps Service Manager"
+  echo "  Logged in as: $USER"
+  echo "  $(date '+%Y-%m-%d %H:%M:%S')"
+  echo "=============================================="
+}
+
+get_queue_count() {
+  condor_q "$USER" 2>/dev/null | \
+    awk '/Total for/ {print $4+$6+$8}' | tail -1
+}
+
+# ── MENU ─────────────────────────────────────────────────────────────────────
+show_menu() {
+  echo ""
+  echo "  1)  Submit a new job"
+  echo "  2)  View my job queue"
+  echo "  3)  View job history"
+  echo "  4)  Cancel a job"
+  echo "  5)  Check pool status"
+  echo "  6)  List my project files"
+  echo "  7)  View my quota usage"
+  echo "  8)  View SLO status"
+  echo "  9)  Exit"
+  echo ""
+  echo -n "  Select option [1-9]: "
+}
+
+# ── QUOTA VALIDATION ─────────────────────────────────────────────────────────
+validate_job() {
+  local ram_mb="$1"
+  local disk_mb="$2"
+  local queue_count
+
+  # RAM limit check
+  if [ "${ram_mb:-0}" -gt "$MAX_RAM" ]; then
+    echo ""
+    echo "  ERROR: Requested RAM ${ram_mb}MB exceeds limit of ${MAX_RAM}MB (4GB)."
+    echo "         Split your job into smaller chunks."
+    log "QUOTA_REJECT ram_requested=${ram_mb}MB limit=${MAX_RAM}MB"
+    return 1
+  fi
+
+  # Queue depth check
+  queue_count=$(get_queue_count)
+  if [ "${queue_count:-0}" -ge "$MAX_JOBS" ]; then
+    echo ""
+    echo "  ERROR: You already have ${queue_count} jobs in the queue."
+    echo "         Maximum allowed is ${MAX_JOBS}. Wait for jobs to complete."
+    log "QUOTA_REJECT queue_depth=${queue_count} limit=${MAX_JOBS}"
+    return 1
+  fi
+
+  return 0
+}
+
+# ── ACTION: Submit job ────────────────────────────────────────────────────────
+action_submit() {
+  echo ""
+  echo "  === Submit a New Job ==="
+  echo ""
+
+  # Get project group
+  USER_GROUPS=$(id -Gn "$USER" 2>/dev/null)
+  PROJECT_GROUP=""
+  for grp in physics-grp biology-grp chem-grp; do
+    if echo "$USER_GROUPS" | grep -qw "$grp"; then
+      PROJECT_GROUP="$grp"
+      break
+    fi
+  done
+
+  echo -n "  Job name (no spaces): "
+  read -r JOB_NAME
+  JOB_NAME=$(echo "$JOB_NAME" | tr -cs 'a-zA-Z0-9_-' '_')
+  [ -z "$JOB_NAME" ] && JOB_NAME="job_$(date +%s)"
+
+  echo -n "  CPUs required [1]: "
+  read -r CPUS
+  CPUS=${CPUS:-1}
+
+  echo -n "  RAM required in MB [512]: "
+  read -r RAM_MB
+  RAM_MB=${RAM_MB:-512}
+
+  # Validate before proceeding
+  validate_job "$RAM_MB" "1024" || return 1
+
+  # Container or bare?
+  echo -n "  Use research-workload container? [Y/n]: "
+  read -r USE_CONTAINER
+  USE_CONTAINER=${USE_CONTAINER:-Y}
+
+  # Set up job directory
+  JOB_DIR="/data/outputs/${USER}_${JOB_NAME}_$(date +%s)"
+  mkdir -p "$JOB_DIR"
+  chown "$USER" "$JOB_DIR" 2>/dev/null || true
+
+  # Write the submit file
+  SUBFILE="$JOB_DIR/${JOB_NAME}.sub"
+
+  if [[ "${USE_CONTAINER^^}" == "Y" ]]; then
+    cat > "$SUBFILE" << JOBEOF
+universe                 = vanilla
+executable               = /usr/local/bin/run-apptainer-job
+arguments                = research-workload.sif
+should_transfer_files    = YES
+transfer_executable      = False
+when_to_transfer_output  = ON_EXIT
+transfer_input_files     = /data/containers/research-workload.sif
+output                   = $JOB_DIR/${JOB_NAME}-\$(ClusterId).\$(ProcId).out
+error                    = $JOB_DIR/${JOB_NAME}-\$(ClusterId).\$(ProcId).err
+log                      = $JOB_DIR/${JOB_NAME}.log
+request_cpus             = $CPUS
+request_memory           = ${RAM_MB}MB
++AccountingGroup         = "group_${PROJECT_GROUP%-grp}"
+queue 1
+JOBEOF
+  else
+    echo -n "  Executable path: "
+    read -r EXEC_PATH
+    cat > "$SUBFILE" << JOBEOF
+universe       = vanilla
+executable     = $EXEC_PATH
+output         = $JOB_DIR/${JOB_NAME}-\$(ClusterId).\$(ProcId).out
+error          = $JOB_DIR/${JOB_NAME}-\$(ClusterId).\$(ProcId).err
+log            = $JOB_DIR/${JOB_NAME}.log
+request_cpus   = $CPUS
+request_memory = ${RAM_MB}MB
++AccountingGroup = "group_${PROJECT_GROUP%-grp}"
+queue 1
+JOBEOF
+  fi
+
+  # Submit
+  SUBMIT_OUT=$(condor_submit "$SUBFILE" 2>&1)
+  if echo "$SUBMIT_OUT" | grep -q "submitted to cluster"; then
+    CLUSTER=$(echo "$SUBMIT_OUT" | grep -o 'cluster [0-9]*' | awk '{print $2}')
+    echo ""
+    echo "  Job submitted successfully — cluster $CLUSTER"
+    echo "  Output directory: $JOB_DIR"
+    log "JOB_SUBMIT name=$JOB_NAME cluster=$CLUSTER ram=${RAM_MB}MB cpus=$CPUS group=$PROJECT_GROUP"
+  else
+    echo ""
+    echo "  ERROR: Job submission failed:"
+    echo "  $SUBMIT_OUT"
+    log "JOB_SUBMIT_FAIL name=$JOB_NAME error=$SUBMIT_OUT"
+  fi
+}
+
+# ── ACTION: View queue ────────────────────────────────────────────────────────
+action_queue() {
+  echo ""
+  echo "  === My Job Queue ==="
+  echo ""
+  condor_q "$USER" 2>/dev/null || echo "  No jobs in queue."
+  log "VIEW_QUEUE"
+}
+
+# ── ACTION: Job history ───────────────────────────────────────────────────────
+action_history() {
+  echo ""
+  echo "  === My Job History (last 10) ==="
+  echo ""
+  condor_history "$USER" 2>/dev/null | head -12 || echo "  No history found."
+  log "VIEW_HISTORY"
+}
+
+# ── ACTION: Cancel job ────────────────────────────────────────────────────────
+action_cancel() {
+  echo ""
+  echo "  === Cancel a Job ==="
+  condor_q "$USER" 2>/dev/null
+  echo ""
+  echo -n "  Enter job ID to cancel (e.g. 42.0) or 'all': "
+  read -r JOB_ID
+  if [ "$JOB_ID" = "all" ]; then
+    condor_rm "$USER" 2>/dev/null
+    echo "  All jobs cancelled."
+    log "JOB_CANCEL_ALL"
+  elif [ -n "$JOB_ID" ]; then
+    condor_rm "$JOB_ID" 2>/dev/null
+    echo "  Job $JOB_ID cancelled."
+    log "JOB_CANCEL id=$JOB_ID"
+  fi
+}
+
+# ── ACTION: Pool status ───────────────────────────────────────────────────────
+action_pool() {
+  echo ""
+  echo "  === HTCondor Pool Status ==="
+  echo ""
+  condor_status 2>/dev/null || echo "  Cannot reach pool."
+  echo ""
+  echo "  === Accounting Group Quotas ==="
+  condor_q -g 2>/dev/null | grep -E "group_|OWNER" || true
+  log "VIEW_POOL"
+}
+
+# ── ACTION: List project files ────────────────────────────────────────────────
+action_files() {
+  echo ""
+  echo "  === My Project Files ==="
+  USER_GROUPS=$(id -Gn "$USER" 2>/dev/null)
+  for grp in physics-grp biology-grp chem-grp; do
+    if echo "$USER_GROUPS" | grep -qw "$grp"; then
+      PROJECT="${grp%-grp}"
+      echo ""
+      echo "  /data/projects/$PROJECT:"
+      ls -lh "/data/projects/$PROJECT/" 2>/dev/null || \
+        echo "  (empty or no access)"
+    fi
+  done
+  echo ""
+  echo "  /data/outputs (my jobs):"
+  ls -lhd "/data/outputs/${USER}_"* 2>/dev/null || echo "  No output directories."
+  log "VIEW_FILES"
+}
+
+# ── ACTION: Quota usage ───────────────────────────────────────────────────────
+action_quota() {
+  echo ""
+  echo "  === My Quota Usage ==="
+  QUEUE_COUNT=$(get_queue_count)
+  echo "  Jobs in queue:   $QUEUE_COUNT / $MAX_JOBS"
+  echo "  Max RAM per job: ${MAX_RAM}MB (4GB)"
+  echo ""
+  echo "  Accounting group usage:"
+  condor_userprio 2>/dev/null | grep -E "$USER|RESOURCE" || \
+    echo "  No usage data yet."
+  log "VIEW_QUOTA"
+}
+
+# ── ACTION: SLO status ────────────────────────────────────────────────────────
+action_slo() {
+  echo ""
+  echo "  === SLO Status ==="
+  PROM="http://10.0.0.15:9090"
+  echo ""
+  for metric in \
+    "htcondor:job_submission_success_rate:5m" \
+    "htcondor:error_budget_remaining:30d" \
+    "htcondor:pool_utilisation:5m"; do
+    VAL=$(curl -s --max-time 5 \
+      "${PROM}/api/v1/query?query=${metric}" 2>/dev/null | \
+      python3 -c "
+import sys,json
+try:
+    d=json.load(sys.stdin)
+    r=d.get('data',{}).get('result',[])
+    if r: print(round(float(r[0]['value'][1])*100,2))
+    else: print('no data')
+except: print('error')
+" 2>/dev/null)
+    printf "  %-45s %s%%\n" "$metric" "$VAL"
+  done
+  echo ""
+  echo "  Grafana dashboard: http://10.0.0.15:3000"
+  log "VIEW_SLO"
+}
+
+# ── MAIN LOOP ────────────────────────────────────────────────────────────────
+log "LOGIN"
+
+# If run non-interactively (e.g. scp), drop to bash
+if [ ! -t 0 ]; then
+  exec /bin/bash
+fi
+
+while true; do
+  print_banner
+  show_menu
+  read -r CHOICE
+
+  case "$CHOICE" in
+    1) action_submit ;;
+    2) action_queue  ;;
+    3) action_history ;;
+    4) action_cancel  ;;
+    5) action_pool    ;;
+    6) action_files   ;;
+    7) action_quota   ;;
+    8) action_slo     ;;
+    9)
+      echo ""
+      echo "  Goodbye $USER."
+      log "LOGOUT"
+      exit 0
+      ;;
+    *)
+      echo "  Invalid option. Please enter 1-9."
+      ;;
+  esac
+
+  echo ""
+  echo -n "  Press Enter to return to menu..."
+  read -r
+done

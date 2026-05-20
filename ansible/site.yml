@@ -29,6 +29,7 @@
   roles:
     - htcondor-submit
     - docker
+    - service-manager
 
 - name: Configure HTCondor Execute Nodes
   hosts: execute

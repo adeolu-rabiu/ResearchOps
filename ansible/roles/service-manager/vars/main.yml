@@ -1,0 +1,28 @@
+---
+# ResearchOps Service Manager configuration
+
+service_manager_bin: /usr/local/bin/researchops
+service_manager_log: /data/logs/servicemanager.log
+
+# Quota enforcement
+max_ram_per_job_mb: 4096       # 4GB RAM hard limit per job
+max_jobs_per_user:  5          # max jobs in queue per researcher
+max_disk_per_job_mb: 20480     # 20GB disk per job
+
+# HTCondor paths
+condor_config: /opt/htcondor/etc/condor_config
+condor_bin:    /opt/htcondor/bin
+condor_sbin:   /opt/htcondor/sbin
+
+# Accounting group map
+group_quotas:
+  physics-grp:  4
+  biology-grp:  2
+  chem-grp:     2
+  research-grp: 1
+
+# Researcher users to configure shell for
+researcher_users:
+  - alice
+  - bob
+  - researcher

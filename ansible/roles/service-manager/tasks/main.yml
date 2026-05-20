@@ -1,0 +1,54 @@
+---
+- name: Ensure /data/logs exists and is root-owned
+  file:
+    path: /data/logs
+    state: directory
+    owner: root
+    group: root
+    mode: '0700'
+
+- name: Create service manager log file
+  file:
+    path: "{{ service_manager_log }}"
+    state: touch
+    owner: root
+    group: root
+    mode: '0600'
+  changed_when: false
+
+- name: Deploy ResearchOps portal script
+  template:
+    src: researchops.sh.j2
+    dest: "{{ service_manager_bin }}"
+    owner: root
+    group: root
+    mode: '0755'
+
+- name: Add service-manager shell to /etc/shells
+  lineinfile:
+    path: /etc/shells
+    line: "{{ service_manager_bin }}"
+    state: present
+
+- name: Ensure researcher groups exist
+  group:
+    name: "{{ item }}"
+    state: present
+  loop:
+    - physics-grp
+    - biology-grp
+    - chem-grp
+    - research-grp
+
+- name: Set researchops as login shell for researcher users
+  user:
+    name: "{{ item }}"
+    shell: "{{ service_manager_bin }}"
+  loop: "{{ researcher_users }}"
+  ignore_errors: yes
+
+- name: Ensure /data/outputs is world-writable with sticky bit
+  file:
+    path: /data/outputs
+    state: directory
+    mode: '1777'

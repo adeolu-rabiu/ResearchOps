@@ -1,0 +1,91 @@
+---
+# Usage: ansible-playbook ansible/playbooks/onboard-researcher.yml
+#          -e researcher=alice -e group=physics
+#
+# Creates: user account, home dir, project dir entry,
+#          copies example job script, sets portal shell
+
+- name: Onboard a new researcher
+  hosts: submit
+  become: yes
+  vars:
+    condor_config: /opt/htcondor/etc/condor_config
+    condor_bin:    /opt/htcondor/bin
+
+  tasks:
+    - name: Validate required variables
+      fail:
+        msg: "Must pass -e researcher=NAME -e group=GROUPNAME"
+      when: researcher is not defined or group is not defined
+
+    - name: Determine group name
+      set_fact:
+        group_name: "{{ group }}-grp"
+
+    - name: Create researcher user
+      user:
+        name: "{{ researcher }}"
+        shell: /usr/local/bin/researchops
+        create_home: yes
+        groups:
+          - "{{ group_name }}"
+          - research-grp
+        append: yes
+        state: present
+
+    - name: Set SSH authorized keys if provided
+      authorized_key:
+        user: "{{ researcher }}"
+        key: "{{ ssh_key }}"
+        state: present
+      when: ssh_key is defined
+
+    - name: Create researcher project subdirectory
+      file:
+        path: "/data/projects/{{ group }}/{{ researcher }}"
+        state: directory
+        owner: "{{ researcher }}"
+        group: "{{ group_name }}"
+        mode: '0770'
+
+    - name: Copy example job script for researcher
+      copy:
+        dest: "/home/{{ researcher }}/example-job.sub"
+        owner: "{{ researcher }}"
+        mode: '0644'
+        content: |
+          # Example HTCondor job for {{ researcher }}
+          # Submit from the Service Manager menu (option 1)
+          # or manually: condor_submit example-job.sub
+
+          universe                 = vanilla
+          executable               = /usr/local/bin/run-apptainer-job
+          arguments                = research-workload.sif
+          should_transfer_files    = YES
+          transfer_executable      = False
+          when_to_transfer_output  = ON_EXIT
+          transfer_input_files     = /data/containers/research-workload.sif
+          output                   = /data/outputs/$(ClusterId).$(ProcId).out
+          error                    = /data/outputs/$(ClusterId).$(ProcId).err
+          log                      = /data/outputs/$(ClusterId).log
+          request_cpus             = 1
+          request_memory           = 512MB
+          +AccountingGroup         = "group_{{ group }}"
+          queue 1
+
+    - name: Log researcher onboarding
+      lineinfile:
+        path: /data/logs/servicemanager.log
+        line: "{{ lookup('pipe', 'date +\"%Y-%m-%d %H:%M:%S\"') }} [admin] ONBOARD user={{ researcher }} group={{ group_name }}"
+        create: yes
+        mode: '0600'
+
+    - name: Print onboarding summary
+      debug:
+        msg:
+          - "Researcher {{ researcher }} onboarded successfully"
+          - "Group: {{ group_name }}"
+          - "Home: /home/{{ researcher }}"
+          - "Project dir: /data/projects/{{ group }}/{{ researcher }}"
+          - "Login shell: /usr/local/bin/researchops"
+          - "SSH: ssh {{ researcher }}@10.0.0.10"
