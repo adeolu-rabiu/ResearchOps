@@ -63,7 +63,7 @@ for name in "submit-node" "central-manager" "execute-node-1" \
             "execute-node-2" "nfs-server" "monitoring"; do
   ip="${VM_IPS[$name]}"
   HOSTNAME=$(ssh -o ConnectTimeout=5 -o StrictHostKeyChecking=no \
-    root@"$ip" "hostname" 2>/dev/null)
+    root@"$ip" "hostname -s" 2>/dev/null)
   [ "$HOSTNAME" = "$name" ] \
     && pass "SSH root@$ip hostname=$HOSTNAME" \
     || fail "SSH root@$ip failed (got '$HOSTNAME' expected '$name')"
