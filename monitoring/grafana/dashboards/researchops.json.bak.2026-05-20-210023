@@ -1,0 +1,118 @@
+{
+  "title": "ResearchOps — HTCondor SLO Dashboard",
+  "uid": "researchops-slo",
+  "version": 1,
+  "refresh": "30s",
+  "time": { "from": "now-1h", "to": "now" },
+  "panels": [
+    {
+      "id": 1,
+      "title": "Job Success Rate (SLO: 99.5%)",
+      "type": "stat",
+      "gridPos": { "x": 0, "y": 0, "w": 6, "h": 4 },
+      "targets": [{
+        "expr": "htcondor:job_submission_success_rate:5m * 100",
+        "legendFormat": "Success Rate %"
+      }],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "thresholds": {
+            "steps": [
+              { "color": "red",    "value": 0 },
+              { "color": "yellow", "value": 99 },
+              { "color": "green",  "value": 99.5 }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "id": 2,
+      "title": "Error Budget Remaining (30d)",
+      "type": "stat",
+      "gridPos": { "x": 6, "y": 0, "w": 6, "h": 4 },
+      "targets": [{
+        "expr": "htcondor:error_budget_remaining:30d * 100",
+        "legendFormat": "Budget %"
+      }],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "thresholds": {
+            "steps": [
+              { "color": "red",    "value": 0 },
+              { "color": "yellow", "value": 25 },
+              { "color": "green",  "value": 50 }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "id": 3,
+      "title": "Jobs in Queue",
+      "type": "stat",
+      "gridPos": { "x": 12, "y": 0, "w": 4, "h": 4 },
+      "targets": [
+        { "expr": "htcondor_schedd_jobs_idle",    "legendFormat": "Idle" },
+        { "expr": "htcondor_schedd_jobs_running", "legendFormat": "Running" },
+        { "expr": "htcondor_schedd_jobs_held",    "legendFormat": "Held" }
+      ]
+    },
+    {
+      "id": 4,
+      "title": "Pool Slots",
+      "type": "stat",
+      "gridPos": { "x": 16, "y": 0, "w": 4, "h": 4 },
+      "targets": [
+        { "expr": "htcondor_pool_slots_total", "legendFormat": "Total" },
+        { "expr": "htcondor_pool_slots_busy",  "legendFormat": "Busy" },
+        { "expr": "htcondor_pool_slots_idle",  "legendFormat": "Idle" }
+      ]
+    },
+    {
+      "id": 5,
+      "title": "Node CPU Usage",
+      "type": "timeseries",
+      "gridPos": { "x": 0, "y": 4, "w": 12, "h": 8 },
+      "targets": [{
+        "expr": "node:cpu_usage:5m * 100",
+        "legendFormat": "{{ instance }}"
+      }],
+      "fieldConfig": { "defaults": { "unit": "percent" } }
+    },
+    {
+      "id": 6,
+      "title": "Node Memory Usage",
+      "type": "timeseries",
+      "gridPos": { "x": 12, "y": 4, "w": 12, "h": 8 },
+      "targets": [{
+        "expr": "node:memory_usage:current * 100",
+        "legendFormat": "{{ instance }}"
+      }],
+      "fieldConfig": { "defaults": { "unit": "percent" } }
+    },
+    {
+      "id": 7,
+      "title": "Scrape Targets Up",
+      "type": "stat",
+      "gridPos": { "x": 0, "y": 12, "w": 6, "h": 4 },
+      "targets": [{
+        "expr": "sum(up)",
+        "legendFormat": "Targets Up"
+      }]
+    },
+    {
+      "id": 8,
+      "title": "Node Disk Usage",
+      "type": "timeseries",
+      "gridPos": { "x": 6, "y": 12, "w": 18, "h": 4 },
+      "targets": [{
+        "expr": "node:disk_usage:current * 100",
+        "legendFormat": "{{ instance }}"
+      }],
+      "fieldConfig": { "defaults": { "unit": "percent" } }
+    }
+  ]
+}
