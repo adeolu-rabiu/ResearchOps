@@ -11,7 +11,7 @@
     "panels": [
       {
         "id": 1,
-        "title": "Job Success Rate (SLO: 99.5%)",
+        "title": "Job Success Rate (30m SLO: 99.5%)",
         "type": "stat",
         "gridPos": {
           "x": 0,
@@ -21,7 +21,7 @@
         },
         "targets": [
           {
-            "expr": "htcondor:job_submission_success_rate:5m * 100",
+            "expr": "htcondor:job_submission_success_rate:30m * 100",
             "legendFormat": "Success Rate %"
           }
         ],
@@ -147,7 +147,7 @@
         },
         "targets": [
           {
-            "expr": "node:cpu_usage:5m * 100",
+            "expr": "node:cpu_usage:5m",
             "legendFormat": "{{ instance }}"
           }
         ],
@@ -169,7 +169,7 @@
         },
         "targets": [
           {
-            "expr": "node:memory_usage:current * 100",
+            "expr": "node:memory_usage:current",
             "legendFormat": "{{ instance }}"
           }
         ],
@@ -208,7 +208,7 @@
         },
         "targets": [
           {
-            "expr": "node:disk_usage:current * 100",
+            "expr": "node:disk_usage:current",
             "legendFormat": "{{ instance }}"
           }
         ],

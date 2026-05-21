@@ -1,86 +1,28 @@
 groups:
-  - name: htcondor_slo
-    interval: 30s
+  - name: researchops-slo
     rules:
-
-      # SLI: Job submission success rate over 5 minute window
-      - record: htcondor:job_submission_success_rate:5m
+      - record: htcondor:job_submission_success_rate:30m
         expr: |
-          htcondor_schedd_jobs_completed_total
-          / (htcondor_schedd_jobs_completed_total
-             + htcondor_schedd_jobs_failed_total + 0.0001)
+          increase(htcondor_schedd_jobs_completed_total[30m])
+          /
+          (
+            increase(htcondor_schedd_jobs_completed_total[30m])
+            + increase(htcondor_schedd_jobs_failed_total[30m])
+            + 0.0001
+          )
 
-      # SLI: Execute node availability (slots that are not down)
-      - record: htcondor:execute_node_availability:5m
-        expr: |
-          (htcondor_pool_slots_total - htcondor_pool_slots_idle)
-          / (htcondor_pool_slots_total + 0.0001)
-
-      # SLI: Pool slot utilisation
-      - record: htcondor:pool_utilisation:5m
-        expr: |
-          htcondor_pool_slots_busy
-          / (htcondor_pool_slots_total + 0.0001)
-
-      # Error budget remaining — SLO target 99.5%
-      # 30-day error budget = 3h 36m
       - record: htcondor:error_budget_remaining:30d
         expr: |
-          1 - ((1 - htcondor:job_submission_success_rate:5m)
-               / (1 - 0.995))
+          1 - ((1 - htcondor:job_submission_success_rate:30m) / (1 - 0.995))
 
-      # Node exporter SLIs
       - record: node:cpu_usage:5m
         expr: |
-          1 - avg by (instance) (
-            rate(node_cpu_seconds_total{mode="idle"}[5m])
-          )
+          100 * (1 - avg by(instance) (rate(node_cpu_seconds_total{mode="idle"}[5m])))
 
       - record: node:memory_usage:current
         expr: |
-          1 - (node_memory_MemAvailable_bytes
-               / node_memory_MemTotal_bytes)
+          100 * (1 - (node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes))
 
       - record: node:disk_usage:current
         expr: |
-          1 - (node_filesystem_avail_bytes{mountpoint="/"}
-               / node_filesystem_size_bytes{mountpoint="/"})
-
-  - name: htcondor_alerts
-    rules:
-
-      - alert: HTCondorJobSuccessRateLow
-        expr: htcondor:job_submission_success_rate:5m < 0.995
-        for: 5m
-        labels:
-          severity: warning
-        annotations:
-          summary: "HTCondor job success rate below SLO"
-          description: "Job success rate {{ $value | humanizePercentage }} is below 99.5% SLO target"
-
-      - alert: NodeExporterDown
-        expr: up{job="node-exporter"} == 0
-        for: 2m
-        labels:
-          severity: critical
-        annotations:
-          summary: "Node exporter down on {{ $labels.instance }}"
-          description: "Cannot scrape metrics from {{ $labels.instance }}"
-
-      - alert: HighMemoryUsage
-        expr: node:memory_usage:current > 0.90
-        for: 5m
-        labels:
-          severity: warning
-        annotations:
-          summary: "High memory on {{ $labels.instance }}"
-          description: "Memory usage {{ $value | humanizePercentage }}"
-
-      - alert: HTCondorPoolEmpty
-        expr: htcondor_pool_slots_total == 0
-        for: 2m
-        labels:
-          severity: critical
-        annotations:
-          summary: "HTCondor pool has no slots"
-          description: "condor_status shows zero slots available"
+          100 * (1 - (node_filesystem_avail_bytes{fstype!~"tmpfs|overlay"} / node_filesystem_size_bytes{fstype!~"tmpfs|overlay"}))
