@@ -60,25 +60,85 @@ ssh -N   -L 3000:10.0.0.15:3000   -L 9090:10.0.0.15:9090   root@100.122.5.126
 
 ## Architecture
 
+![ResearchOps Full Architecture](docs/images/researchops-architecture.png)
+
+*Full platform architecture — GitHub as IaC source of truth, Terraform + Ansible deployment, HTCondor pool, Apptainer sandboxing, NFS storage, and Prometheus observability stack*
+
+---
+
+## Phase 3 — Container Isolation Detail
+
+![ResearchOps Phase 3 Container Architecture](docs/images/phase3-architecture.png)
+
+*Phase 3 detail — Docker builds the SIF image on submit-node, HTCondor transfers it to execute nodes, Apptainer runs it in a rootless sandbox, output returns to the researcher*
+
+---
+
+## Researcher Journey
+
+```mermaid
+%%{init: {
+  "theme": "base",
+  "themeVariables": {
+    "background": "#ffffff",
+    "mainBkg": "#ffffff",
+    "fontFamily": "Arial",
+    "fontSize": "16px",
+    "primaryTextColor": "#111827",
+    "lineColor": "#374151"
+  }
+}}%%
+flowchart TD
+    A["Researcher logs into ResearchOps Portal"] --> B["Portal authenticates user"]
+    B --> C["Researcher selects numbered menu option"]
+    C --> D["Submit job"]
+    C --> E["Check queue"]
+    C --> F["View quota"]
+    C --> G["Browse data"]
+    C --> H["Check platform status"]
+    D --> I["Quota Engine validates CPU, RAM, and storage"]
+    I --> J{"Within quota?"}
+    J -- "No" --> K["Request rejected with clear message"]
+    K --> C
+    J -- "Yes" --> L["RBAC authorises submission"]
+    L --> M["Job submitted to HTCondor"]
+    M --> N["HTCondor schedules job to execute node"]
+    N --> O["Execute node runs job inside Apptainer sandbox"]
+    O --> P["Job reads/writes data on NFS shared storage"]
+    P --> Q["Metrics sent to Prometheus and Grafana"]
+    Q --> R["Researcher receives job output"]
+    E --> S["Show queued, running, completed or failed jobs"]
+    F --> T["Show current quota usage"]
+    G --> U["Open authorised project data"]
+    H --> V["Show service health dashboard"]
+    S --> C
+    T --> C
+    U --> C
+    V --> C
+    R --> W["Researcher logs out or submits another job"]
+    classDef portal fill:#E0F2FE,stroke:#0369A1,stroke-width:2px,color:#0C4A6E
+    classDef menu fill:#EDE9FE,stroke:#7C3AED,stroke-width:2px,color:#3B0764
+    classDef service fill:#FFEDD5,stroke:#EA580C,stroke-width:2px,color:#7C2D12
+    classDef decision fill:#FEF9C3,stroke:#CA8A04,stroke-width:2px,color:#713F12
+    classDef error fill:#FEE2E2,stroke:#DC2626,stroke-width:2px,color:#7F1D1D
+    classDef condor fill:#DBEAFE,stroke:#2563EB,stroke-width:2px,color:#1E3A8A
+    classDef container fill:#DCFCE7,stroke:#16A34A,stroke-width:2px,color:#14532D
+    classDef storage fill:#FEF3C7,stroke:#D97706,stroke-width:2px,color:#78350F
+    classDef observability fill:#FCE7F3,stroke:#DB2777,stroke-width:2px,color:#831843
+    classDef success fill:#ECFDF5,stroke:#059669,stroke-width:2px,color:#064E3B
+    class A,B portal
+    class C,D,E,F,G,H menu
+    class I,L service
+    class J decision
+    class K error
+    class M,N,S condor
+    class O container
+    class P,U storage
+    class Q,V observability
+    class R,T,W success
 ```
-                    ┌─────────────────────────────────────────────┐
-                    │  rabtech — HP EliteDesk 800 G2              │
-                    │  Proxmox VE 9.1.9 · 40GB RAM · 3.25TB       │
-                    │                                             │
-                    │  ┌──────────┐  ┌──────────────┐            │
-                    │  │submit    │  │central-mgr   │            │
-                    │  │10.0.0.10 │  │10.0.0.11     │            │
-                    │  └──────────┘  └──────────────┘            │
-                    │  ┌──────────┐  ┌──────────────┐            │
-                    │  │execute-1 │  │execute-2     │            │
-                    │  │10.0.0.12 │  │10.0.0.13     │            │
-                    │  └──────────┘  └──────────────┘            │
-                    │  ┌──────────┐  ┌──────────────┐            │
-                    │  │nfs-server│  │monitoring    │            │
-                    │  │10.0.0.14 │  │10.0.0.15     │            │
-                    │  └──────────┘  └──────────────┘            │
-                    └─────────────────────────────────────────────┘
-```
+
+*Researcher journey — from SSH login through the Service Manager portal, quota enforcement, HTCondor scheduling, Apptainer container execution, NFS data access, and Prometheus observability*
 
 ---
 
