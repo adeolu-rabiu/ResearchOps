@@ -66,14 +66,6 @@ ssh -N   -L 3000:10.0.0.15:3000   -L 9090:10.0.0.15:9090   root@100.122.5.126
 
 ---
 
-## Phase 3 — Container Isolation Detail
-
-![ResearchOps Phase 3 Container Architecture](docs/images/phase3-architecture.png)
-
-*Phase 3 detail — Docker builds the SIF image on submit-node, HTCondor transfers it to execute nodes, Apptainer runs it in a rootless sandbox, output returns to the researcher*
-
----
-
 ## Researcher Journey
 
 ```mermaid
