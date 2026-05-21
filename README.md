@@ -28,6 +28,15 @@
 
 ---
 
+
+## Hardware Infrastructure
+
+![ResearchOps Hardware Infrastructure on HP EliteDesk 800 G2](docs/images/hardware-infrastructure.jpg)
+
+*HP EliteDesk 800 G2 · Proxmox VE 9.1.9 · 40GB RAM · 3.25TB total storage · 6 ResearchOps VMs on private 10.0.0.0/24 network*
+
+---
+
 ## What Is ResearchOps?
 
 ResearchOps is a fully self-hosted, Infrastructure-as-Code research compute platform built on a bare-metal Proxmox VE hypervisor. It provisions six purpose-built Linux VMs to deliver a production-grade HTCondor high-throughput computing pool, with:
