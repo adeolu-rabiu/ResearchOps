@@ -50,22 +50,6 @@ ResearchOps is a fully self-hosted, Infrastructure-as-Code research compute plat
 
 ---
 
-## Remote Demo Access
-
-Platform is remotely accessible via [Tailscale](https://tailscale.com) from any network including UoM campus.
-
-### One-command tunnel (SSH required)
-
-```bash
-ssh -N   -L 3000:10.0.0.15:3000   -L 9090:10.0.0.15:9090   root@100.122.5.126
-
-# Then open:
-# http://localhost:3000  → Grafana  (admin / htcondorsre)
-# http://localhost:9090  → Prometheus
-```
-
----
-
 ## Architecture
 
 ![ResearchOps Full Architecture](docs/images/researchops-architecture.png)
