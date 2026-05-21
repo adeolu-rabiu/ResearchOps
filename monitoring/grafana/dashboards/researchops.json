@@ -47,49 +47,11 @@
       }
     },
     {
-      "id": 2,
-      "title": "Error Budget Remaining (30d)",
-      "type": "stat",
-      "gridPos": {
-        "x": 4,
-        "y": 0,
-        "w": 4,
-        "h": 4
-      },
-      "targets": [
-        {
-          "expr": "htcondor:error_budget_remaining:30d * 100",
-          "legendFormat": "Budget %"
-        }
-      ],
-      "fieldConfig": {
-        "defaults": {
-          "unit": "percent",
-          "thresholds": {
-            "steps": [
-              {
-                "color": "red",
-                "value": 0
-              },
-              {
-                "color": "yellow",
-                "value": 25
-              },
-              {
-                "color": "green",
-                "value": 50
-              }
-            ]
-          }
-        }
-      }
-    },
-    {
       "id": 3,
       "title": "Jobs in Queue",
       "type": "stat",
       "gridPos": {
-        "x": 8,
+        "x": 4,
         "y": 0,
         "w": 4,
         "h": 4
@@ -114,7 +76,7 @@
       "title": "Pool Slots",
       "type": "stat",
       "gridPos": {
-        "x": 12,
+        "x": 8,
         "y": 0,
         "w": 4,
         "h": 4
@@ -222,9 +184,9 @@
       "title": "VM Health",
       "type": "stat",
       "gridPos": {
-        "x": 16,
+        "x": 12,
         "y": 0,
-        "w": 4,
+        "w": 6,
         "h": 4
       },
       "targets": [
@@ -286,9 +248,9 @@
       "title": "Down VMs",
       "type": "stat",
       "gridPos": {
-        "x": 20,
+        "x": 18,
         "y": 0,
-        "w": 4,
+        "w": 6,
         "h": 4
       },
       "targets": [
@@ -559,7 +521,7 @@
     },
     {
       "id": 15,
-      "title": "Researcher Logged In",
+      "title": "ResearchOps Users Logged In",
       "type": "stat",
       "gridPos": {
         "x": 0,
@@ -569,42 +531,26 @@
       },
       "targets": [
         {
-          "expr": "researchops_researcher_logged_in",
-          "legendFormat": "Logged In"
+          "expr": "researchops_logged_in_users_total",
+          "legendFormat": "Logged In Users",
+          "refId": "A"
         }
       ],
       "fieldConfig": {
         "defaults": {
-          "unit": "short",
+          "unit": "none",
+          "mappings": [],
           "thresholds": {
             "mode": "absolute",
             "steps": [
               {
                 "color": "green",
                 "value": null
-              },
-              {
-                "color": "yellow",
-                "value": 1
               }
             ]
-          },
-          "mappings": [
-            {
-              "type": "value",
-              "options": {
-                "0": {
-                  "text": "Not logged in",
-                  "color": "green"
-                },
-                "1": {
-                  "text": "Logged in",
-                  "color": "yellow"
-                }
-              }
-            }
-          ]
-        }
+          }
+        },
+        "overrides": []
       },
       "options": {
         "reduceOptions": {
@@ -623,7 +569,7 @@
     },
     {
       "id": 16,
-      "title": "Researcher Session Age",
+      "title": "ResearchOps User Sessions",
       "type": "stat",
       "gridPos": {
         "x": 6,
@@ -633,31 +579,26 @@
       },
       "targets": [
         {
-          "expr": "researchops_researcher_session_age_seconds",
-          "legendFormat": "Session Age"
+          "expr": "sum(researchops_user_session_count)",
+          "legendFormat": "Active Sessions",
+          "refId": "A"
         }
       ],
       "fieldConfig": {
         "defaults": {
-          "unit": "s",
+          "unit": "none",
+          "mappings": [],
           "thresholds": {
             "mode": "absolute",
             "steps": [
               {
                 "color": "green",
                 "value": null
-              },
-              {
-                "color": "yellow",
-                "value": 7200
-              },
-              {
-                "color": "red",
-                "value": 14400
               }
             ]
           }
-        }
+        },
+        "overrides": []
       },
       "options": {
         "reduceOptions": {
