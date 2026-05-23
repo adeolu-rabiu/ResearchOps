@@ -1,0 +1,335 @@
+#!/bin/bash
+# ============================================================
+# ResearchOps Full Stack Startup Script
+# Run on rabtech after hardware maintenance or cold boot
+# Usage: bash /root/researchops-startup.sh
+# ============================================================
+# FIXES APPLIED:
+#   - Removed set -e so script never exits on single failure
+#   - VM start skips if already running
+#   - All errors caught gracefully with warn/fail not exit
+# ============================================================
+
+set -uo pipefail
+
+GREEN='\033[0;32m'; YELLOW='\033[1;33m'; RED='\033[0;31m'
+BLUE='\033[0;34m'; CYAN='\033[0;36m'; NC='\033[0m'
+
+PASS=0; FAIL=0; WARN=0
+LOG="/root/researchops-startup-$(date +%Y%m%d-%H%M%S).log"
+
+pass() { echo -e "${GREEN}  ✓${NC}  $1" | tee -a "$LOG"; PASS=$((PASS+1)); }
+fail() { echo -e "${RED}  ✗${NC}  $1" | tee -a "$LOG"; FAIL=$((FAIL+1)); }
+info() { echo -e "${BLUE}  →${NC}  $1" | tee -a "$LOG"; }
+warn() { echo -e "${YELLOW}  ⚠${NC}  $1" | tee -a "$LOG"; WARN=$((WARN+1)); }
+hdr()  {
+  echo -e "\n${CYAN}══════════════════════════════════════════${NC}" | tee -a "$LOG"
+  echo -e "${CYAN}  $1${NC}" | tee -a "$LOG"
+  echo -e "${CYAN}══════════════════════════════════════════${NC}" | tee -a "$LOG"
+}
+ticker() {
+  local secs=$1 msg=$2
+  echo -ne "${YELLOW}  ⏳  Waiting ${secs}s — ${msg} ${NC}"
+  for i in $(seq 1 "$secs"); do
+    sleep 1
+    echo -ne "."
+  done
+  echo "" | tee -a "$LOG"
+}
+
+# ── Helper: start a VM only if not already running ──────────
+start_vm() {
+  local vmid=$1 name=$2
+  local STATUS
+  STATUS=$(qm status "$vmid" 2>/dev/null | awk '{print $2}' || echo "unknown")
+  if [ "$STATUS" = "running" ]; then
+    info "VMID $vmid ($name) — already running, skipping"
+  else
+    info "Starting VMID $vmid — $name"
+    qm start "$vmid" 2>/dev/null \
+      && info "VMID $vmid start command sent" \
+      || warn "VMID $vmid start command returned error (may still boot)"
+  fi
+}
+
+# ── Helper: SSH with timeout, returns output or "UNREACHABLE"
+ssh_run() {
+  local ip=$1; shift
+  ssh -o ConnectTimeout=15 \
+      -o StrictHostKeyChecking=no \
+      -o BatchMode=yes \
+      ubuntu@"$ip" "$@" 2>/dev/null || echo "UNREACHABLE"
+}
+
+# ════════════════════════════════════════════════════════════
+# BANNER
+# ════════════════════════════════════════════════════════════
+echo "" | tee "$LOG"
+echo -e "${CYAN}╔══════════════════════════════════════════════╗${NC}" | tee -a "$LOG"
+echo -e "${CYAN}║     ResearchOps — Full Stack Startup         ║${NC}" | tee -a "$LOG"
+echo -e "${CYAN}║     $(date '+%Y-%m-%d %H:%M:%S')                    ║${NC}" | tee -a "$LOG"
+echo -e "${CYAN}╚══════════════════════════════════════════════╝${NC}" | tee -a "$LOG"
+
+# ════════════════════════════════════════════════════════════
+# PHASE 1 — Start VMs in dependency order
+# ════════════════════════════════════════════════════════════
+hdr "PHASE 1 — Starting VMs"
+
+# NFS server first — everything else needs /data
+start_vm 204 "nfs-server (10.0.0.14)"
+ticker 30 "nfs-server booting and NFS exports coming up"
+
+if ping -c 2 -W 3 10.0.0.14 >/dev/null 2>&1; then
+  pass "nfs-server 10.0.0.14 is reachable"
+else
+  warn "nfs-server not yet pingable — waiting 20 more seconds"
+  ticker 20 "nfs-server still initialising"
+fi
+
+# Central manager — HTCondor Collector/Negotiator must be up before execute nodes
+start_vm 201 "central-manager (10.0.0.11)"
+ticker 30 "central-manager booting and HTCondor daemons starting"
+
+# Submit node
+start_vm 200 "submit-node (10.0.0.10)"
+ticker 25 "submit-node booting"
+
+# Execute nodes — Startd needs Collector already running
+start_vm 202 "execute-node-1 (10.0.0.12)"
+ticker 20 "execute-node-1 booting"
+
+start_vm 203 "execute-node-2 (10.0.0.13)"
+ticker 20 "execute-node-2 booting"
+
+# Monitoring last — Prometheus needs all targets up first
+start_vm 205 "monitoring (10.0.0.15)"
+ticker 30 "monitoring VM booting and Docker stack starting"
+
+pass "All 6 VMs processed in dependency order"
+
+# ════════════════════════════════════════════════════════════
+# PHASE 2 — Verify SSH connectivity
+# ════════════════════════════════════════════════════════════
+hdr "PHASE 2 — Verifying VM SSH connectivity"
+
+ticker 20 "allowing VMs to finish cloud-init and SSH daemon start"
+
+declare -A VM_IPS=(
+  [submit-node]="10.0.0.10"
+  [central-manager]="10.0.0.11"
+  [execute-node-1]="10.0.0.12"
+  [execute-node-2]="10.0.0.13"
+  [nfs-server]="10.0.0.14"
+  [monitoring]="10.0.0.15"
+)
+
+for name in submit-node central-manager execute-node-1 execute-node-2 nfs-server monitoring; do
+  ip="${VM_IPS[$name]}"
+  HN=$(ssh_run "$ip" "hostname -s")
+  if [ "$HN" = "UNREACHABLE" ]; then
+    fail "$name ($ip) — SSH unreachable"
+  else
+    pass "$name ($ip) — SSH OK  hostname: $HN"
+  fi
+done
+
+# ════════════════════════════════════════════════════════════
+# PHASE 3 — Verify NFS /data mounts
+# ════════════════════════════════════════════════════════════
+hdr "PHASE 3 — Verifying NFS /data mounts"
+
+for ip in 10.0.0.10 10.0.0.11 10.0.0.12 10.0.0.13 10.0.0.15; do
+  MOUNTED=$(ssh_run "$ip" "findmnt -rn -T /data -o SOURCE 2>/dev/null | head -1")
+  if [ -n "$MOUNTED" ] && [ "$MOUNTED" != "UNREACHABLE" ]; then
+    pass "$ip — /data mounted  ($MOUNTED)"
+  else
+    warn "$ip — /data not mounted — attempting remount"
+    ssh_run "$ip" "mount /data 2>/dev/null || true" > /dev/null
+    sleep 5
+    MOUNTED2=$(ssh_run "$ip" "findmnt -rn -T /data -o SOURCE 2>/dev/null | head -1")
+    if [ -n "$MOUNTED2" ] && [ "$MOUNTED2" != "UNREACHABLE" ]; then
+      pass "$ip — /data remounted successfully"
+    else
+      fail "$ip — /data mount failed — check nfs-server exports"
+    fi
+  fi
+done
+
+# ════════════════════════════════════════════════════════════
+# PHASE 4 — Verify HTCondor pool
+# ════════════════════════════════════════════════════════════
+hdr "PHASE 4 — Verifying HTCondor pool"
+
+ticker 40 "HTCondor Collector and Negotiator initialising"
+
+CONDOR_CMD="export CONDOR_CONFIG=/opt/htcondor/etc/condor_config; export PATH=/opt/htcondor/bin:/opt/htcondor/sbin:\$PATH"
+
+# Collector health
+COL=$(ssh_run 10.0.0.11 "${CONDOR_CMD}; condor_status >/dev/null 2>&1 && echo OK || echo FAIL")
+if echo "$COL" | grep -q "OK"; then
+  pass "HTCondor Collector responding on central-manager"
+else
+  fail "HTCondor Collector not responding — check: ssh ubuntu@10.0.0.11 condor_status"
+fi
+
+# Pool membership
+POOL=$(ssh_run 10.0.0.11 "${CONDOR_CMD}; condor_status 2>/dev/null")
+
+if echo "$POOL" | grep -q "execute-node-1"; then
+  pass "execute-node-1 visible in pool"
+else
+  warn "execute-node-1 not yet in pool — may need up to 5 more minutes"
+fi
+
+if echo "$POOL" | grep -q "execute-node-2"; then
+  pass "execute-node-2 visible in pool"
+else
+  warn "execute-node-2 not yet in pool — may need up to 5 more minutes"
+fi
+
+SLOTS=$(ssh_run 10.0.0.11 "${CONDOR_CMD}; condor_status 2>/dev/null | grep -c 'Unclaimed\|Claimed'" || echo "0")
+info "HTCondor pool slots visible: $SLOTS"
+if [ "${SLOTS:-0}" -ge 4 ] 2>/dev/null; then
+  pass "HTCondor pool has $SLOTS slots"
+else
+  warn "Only $SLOTS slots visible — execute nodes may still be registering"
+fi
+
+# ════════════════════════════════════════════════════════════
+# PHASE 5 — Verify Docker monitoring stack
+# ════════════════════════════════════════════════════════════
+hdr "PHASE 5 — Verifying monitoring stack"
+
+ticker 30 "Docker containers starting on monitoring VM"
+
+CONTAINERS=$(ssh_run 10.0.0.15 "docker ps --format '{{.Names}}' 2>/dev/null" || echo "")
+
+for container in prometheus grafana alertmanager; do
+  if echo "$CONTAINERS" | grep -q "$container"; then
+    pass "$container container running"
+  else
+    warn "$container not running — attempting start"
+    ssh_run 10.0.0.15 \
+      "cd /opt/monitoring && docker compose up -d $container 2>/dev/null || true" \
+      > /dev/null
+    ticker 15 "starting $container"
+    RUNNING=$(ssh_run 10.0.0.15 \
+      "docker ps --format '{{.Names}}' 2>/dev/null | grep $container || true")
+    if [ -n "$RUNNING" ] && [ "$RUNNING" != "UNREACHABLE" ]; then
+      pass "$container started successfully"
+    else
+      fail "$container failed to start — check: ssh ubuntu@10.0.0.15 'docker logs $container'"
+    fi
+  fi
+done
+
+# Prometheus health endpoint
+PROM=$(curl -s --max-time 10 "http://10.0.0.15:9090/-/healthy" 2>/dev/null || echo "")
+if echo "$PROM" | grep -qi "healthy"; then
+  pass "Prometheus healthy at :9090"
+else
+  warn "Prometheus health check failed — may still be initialising"
+fi
+
+# Grafana HTTP check
+GCODE=$(curl -s -o /dev/null -w "%{http_code}" --max-time 10 \
+  "http://10.0.0.15:3000" 2>/dev/null || echo "000")
+if [ "$GCODE" = "200" ] || [ "$GCODE" = "302" ]; then
+  pass "Grafana reachable at :3000  (HTTP $GCODE)"
+else
+  warn "Grafana returned HTTP $GCODE — may still be starting"
+fi
+
+# ════════════════════════════════════════════════════════════
+# PHASE 6 — Tailscale and Grafana Funnel
+# ════════════════════════════════════════════════════════════
+hdr "PHASE 6 — Verifying Tailscale and Grafana Funnel"
+
+TS=$(tailscale status 2>/dev/null | head -3 || echo "")
+if echo "$TS" | grep -q "100\."; then
+  pass "Tailscale connected on rabtech"
+else
+  warn "Tailscale not connected — running tailscale up"
+  tailscale up 2>/dev/null || true
+  sleep 5
+fi
+
+FUNNEL=$(tailscale funnel status 2>/dev/null || echo "")
+if echo "$FUNNEL" | grep -q "tailb41b25.ts.net"; then
+  pass "Tailscale Funnel active — rabtech.tailb41b25.ts.net"
+else
+  warn "Funnel not active — restarting"
+  tailscale funnel --bg 3000 2>/dev/null || true
+  sleep 5
+  pass "Tailscale Funnel restart command sent"
+fi
+
+# ════════════════════════════════════════════════════════════
+# PHASE 7 — End-to-end smoke test job
+# ════════════════════════════════════════════════════════════
+hdr "PHASE 7 — End-to-end smoke test"
+
+ticker 20 "allowing HTCondor pool to fully stabilise"
+
+JOB_RESULT=$(ssh_run 10.0.0.10 '
+  export CONDOR_CONFIG=/opt/htcondor/etc/condor_config
+  export PATH=/opt/htcondor/bin:/opt/htcondor/sbin:$PATH
+  cat > /tmp/startup-test.sub << JOBEOF
+universe       = vanilla
+executable     = /bin/hostname
+output         = /tmp/startup-test.out
+error          = /tmp/startup-test.err
+log            = /tmp/startup-test.log
+request_cpus   = 1
+request_memory = 256MB
+queue 1
+JOBEOF
+  condor_submit /tmp/startup-test.sub 2>/dev/null
+')
+
+if echo "$JOB_RESULT" | grep -q "submitted to cluster"; then
+  CLUSTER=$(echo "$JOB_RESULT" | grep -o 'cluster [0-9]*' | awk '{print $2}')
+  info "Test job submitted — cluster $CLUSTER"
+  ticker 60 "waiting for job to run and complete"
+
+  OUTPUT=$(ssh_run 10.0.0.10 "cat /tmp/startup-test.out 2>/dev/null" || echo "")
+  if [ -n "$OUTPUT" ] && [ "$OUTPUT" != "UNREACHABLE" ]; then
+    pass "End-to-end job completed — ran on: $OUTPUT"
+  else
+    warn "Job output not yet available — may still be running"
+    info "Check with: ssh ubuntu@10.0.0.10 condor_q"
+  fi
+else
+  fail "Job submission failed — HTCondor schedd may not be ready"
+  info "Check with: ssh ubuntu@10.0.0.11 condor_status"
+fi
+
+# ════════════════════════════════════════════════════════════
+# SUMMARY
+# ════════════════════════════════════════════════════════════
+echo "" | tee -a "$LOG"
+echo -e "${CYAN}╔══════════════════════════════════════════════╗${NC}" | tee -a "$LOG"
+echo -e "${CYAN}║           STARTUP SUMMARY                    ║${NC}" | tee -a "$LOG"
+echo -e "${CYAN}╠══════════════════════════════════════════════╣${NC}" | tee -a "$LOG"
+echo -e "${CYAN}║${NC}  ${GREEN}PASSED : $PASS${NC}                                 ${CYAN}║${NC}" | tee -a "$LOG"
+echo -e "${CYAN}║${NC}  ${YELLOW}WARNINGS: $WARN${NC}                                ${CYAN}║${NC}" | tee -a "$LOG"
+echo -e "${CYAN}║${NC}  ${RED}FAILED : $FAIL${NC}                                 ${CYAN}║${NC}" | tee -a "$LOG"
+echo -e "${CYAN}╠══════════════════════════════════════════════╣${NC}" | tee -a "$LOG"
+echo -e "${CYAN}║${NC}  Grafana    → http://10.0.0.15:3000          ${CYAN}║${NC}" | tee -a "$LOG"
+echo -e "${CYAN}║${NC}  Prometheus → http://10.0.0.15:9090          ${CYAN}║${NC}" | tee -a "$LOG"
+echo -e "${CYAN}║${NC}  Live URL   → rabtech.tailb41b25.ts.net       ${CYAN}║${NC}" | tee -a "$LOG"
+echo -e "${CYAN}╠══════════════════════════════════════════════╣${NC}" | tee -a "$LOG"
+echo -e "${CYAN}║${NC}  Laptop tunnel:                               ${CYAN}║${NC}" | tee -a "$LOG"
+echo -e "${CYAN}║${NC}  ssh -N -L 3000:10.0.0.15:3000 \\              ${CYAN}║${NC}" | tee -a "$LOG"
+echo -e "${CYAN}║${NC}       -L 9090:10.0.0.15:9090 \\               ${CYAN}║${NC}" | tee -a "$LOG"
+echo -e "${CYAN}║${NC}       ubuntu@100.122.5.126                      ${CYAN}║${NC}" | tee -a "$LOG"
+echo -e "${CYAN}╚══════════════════════════════════════════════╝${NC}" | tee -a "$LOG"
+echo "" | tee -a "$LOG"
+echo -e "  Log saved: $LOG" | tee -a "$LOG"
+echo "" | tee -a "$LOG"
+
+if [ "$FAIL" -eq 0 ]; then
+  echo -e "${GREEN}  ✓ ResearchOps is UP${NC}" | tee -a "$LOG"
+else
+  echo -e "${RED}  ✗ ResearchOps started with $FAIL failure(s) — check log above${NC}" | tee -a "$LOG"
+fi
