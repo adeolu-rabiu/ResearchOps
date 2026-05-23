@@ -56,7 +56,7 @@ start_vm() {
 ssh_run() {
   local ip=$1; shift
   ssh -o ConnectTimeout=15 \
-      -o StrictHostKeyChecking=no \
+      -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null \
       -o BatchMode=yes \
       ubuntu@"$ip" "$@" 2>/dev/null || echo "UNREACHABLE"
 }
@@ -202,23 +202,23 @@ hdr "PHASE 5 — Verifying monitoring stack"
 
 ticker 30 "Docker containers starting on monitoring VM"
 
-CONTAINERS=$(ssh_run 10.0.0.15 "docker ps --format '{{.Names}}' 2>/dev/null" || echo "")
+CONTAINERS=$(ssh_run 10.0.0.15 "sudo docker ps --format '{{.Names}}' 2>/dev/null" || echo "")
 
 for container in prometheus grafana alertmanager; do
-  if echo "$CONTAINERS" | grep -q "$container"; then
+  if echo "$CONTAINERS" | grep -iq "$container"; then
     pass "$container container running"
   else
     warn "$container not running — attempting start"
     ssh_run 10.0.0.15 \
-      "cd /opt/monitoring && docker compose up -d $container 2>/dev/null || true" \
+      "cd /opt/monitoring && sudo docker compose up -d $container 2>/dev/null || true" \
       > /dev/null
     ticker 15 "starting $container"
     RUNNING=$(ssh_run 10.0.0.15 \
-      "docker ps --format '{{.Names}}' 2>/dev/null | grep $container || true")
+      "sudo docker ps --format '{{.Names}}' 2>/dev/null | grep -i $container || true")
     if [ -n "$RUNNING" ] && [ "$RUNNING" != "UNREACHABLE" ]; then
       pass "$container started successfully"
     else
-      fail "$container failed to start — check: ssh ubuntu@10.0.0.15 'docker logs $container'"
+      fail "$container failed to start — check: ssh ubuntu@10.0.0.15 'sudo docker logs $container'"
     fi
   fi
 done

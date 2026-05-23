@@ -274,25 +274,29 @@ ticker 20 "allowing HTCondor pool to fully stabilise"
 JOB_RESULT=$(ssh_run 10.0.0.10 '
   export CONDOR_CONFIG=/opt/htcondor/etc/condor_config
   export PATH=/opt/htcondor/bin:/opt/htcondor/sbin:$PATH
-  cat > /tmp/startup-test.sub << JOBEOF
+  mkdir -p /data/outputs/startup-test
+  chmod 777 /data/outputs/startup-test
+  rm -f /data/outputs/startup-test/startup-test.out /data/outputs/startup-test/startup-test.err /data/outputs/startup-test/startup-test.log
+  cat > /data/outputs/startup-test/startup-test.sub << JOBEOF
 universe       = vanilla
 executable     = /bin/hostname
-output         = /tmp/startup-test.out
-error          = /tmp/startup-test.err
-log            = /tmp/startup-test.log
+initialdir     = /data/outputs/startup-test
+output         = startup-test.out
+error          = startup-test.err
+log            = startup-test.log
 request_cpus   = 1
 request_memory = 256MB
 queue 1
 JOBEOF
-  condor_submit /tmp/startup-test.sub 2>/dev/null
+  condor_submit /data/outputs/startup-test/startup-test.sub 2>/dev/null
 ')
 
 if echo "$JOB_RESULT" | grep -q "submitted to cluster"; then
   CLUSTER=$(echo "$JOB_RESULT" | grep -o 'cluster [0-9]*' | awk '{print $2}')
   info "Test job submitted — cluster $CLUSTER"
-  ticker 60 "waiting for job to run and complete"
+  ticker 120 "waiting for job to run and complete"
 
-  OUTPUT=$(ssh_run 10.0.0.10 "cat /tmp/startup-test.out 2>/dev/null" || echo "")
+  OUTPUT=$(ssh_run 10.0.0.10 "cat /data/outputs/startup-test/startup-test.out 2>/dev/null" || echo "")
   if [ -n "$OUTPUT" ] && [ "$OUTPUT" != "UNREACHABLE" ]; then
     pass "End-to-end job completed — ran on: $OUTPUT"
   else
